@@ -1,110 +1,145 @@
-import React, { useState } from 'react';
-import { TextInput, Button, Alert, StyleSheet, View, ImageBackground } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Button, ActivityIndicator, Alert, StyleSheet, View, ImageBackground } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 
-// Importa Firestore y funciones relacionadas
-import { db } from '../../FireConfig'; // Ajusta la ruta según la ubicación de tu archivo FireConfig.js
-import { collection, addDoc } from 'firebase/firestore';
+// Importaciones para autenticación y Firestore
+import { auth, db } from '../../FireConfig';
+import { User, onAuthStateChanged, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+import * as Linking from 'expo-linking';
+
+WebBrowser.maybeCompleteAuthSession();
+
+const discovery = {
+  authorizationEndpoint: 'https://accounts.google.com/o/oauth2/auth',
+  tokenEndpoint: 'https://oauth2.googleapis.com/token',
+  revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
+};
 
 export default function HomeScreen() {
-  const [inputValue, setInputValue] = useState('');
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const addCustomData = async () => {
-    if (!inputValue.trim()) {
-      Alert.alert('Error', 'Por favor ingresa un dato válido.');
-      return;
-    }
+  const redirectUri = AuthSession.makeRedirectUri({
+    scheme: 'https',
+    path: 'auth',
 
-    try {
-      // Referencia a la colección 'testCollection'
-      const docRef = await addDoc(collection(db, 'testCollection'), {
-        value: inputValue,
-        createdAt: new Date(),
-      });
-      Alert.alert('Éxito', `Dato añadido con ID: ${docRef.id}`);
-      setInputValue(''); // Limpiar el campo después de guardar
-    } catch (e) {
-      console.error('Error añadiendo el documento: ', e);
-      Alert.alert('Error', 'Hubo un problema al guardar el dato.');
+  });
+
+  const [request, response, promptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId: '134101858396-0vokoc6kflfcpacflj5s45lao6ecqgms.apps.googleusercontent.com',
+      redirectUri,
+      scopes: ['profile', 'email'],
+    },
+    discovery
+  );
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (authenticatedUser) => {
+      setUser(authenticatedUser);
+      setLoading(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { id_token } = response.params;
+      const credential = GoogleAuthProvider.credential(id_token);
+
+      signInWithCredential(auth, credential)
+        .then(async (userCredential) => {
+          const loggedUser = userCredential.user;
+          const userDocRef = doc(db, 'users', loggedUser.uid);
+          await setDoc(userDocRef, {
+            displayName: loggedUser.displayName || 'Usuario desconocido',
+            email: loggedUser.email || 'Sin email',
+            photoURL: loggedUser.photoURL || null,
+            lastLogin: new Date().toISOString(),
+          });
+          setUser(loggedUser);
+          Alert.alert('Éxito', 'Inicio de sesión exitoso');
+        })
+        .catch((error) => {
+          console.error('Error en el inicio de sesión: ', error);
+          Alert.alert('Error', 'Hubo un problema al iniciar sesión.');
+        });
     }
-  };
+  }, [response]);
+
+  // Listener para manejar enlaces profundos
+  useEffect(() => {
+    const handleDeepLink = (event: Linking.EventType) => {
+      const data = Linking.parse(event.url);
+      console.log('Deep link data:', data);
+    };
+
+    const linkingEvent = Linking.addEventListener('url', handleDeepLink);
+
+    return () => {
+      linkingEvent.remove();
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#FFA500" />
+        <ThemedText style={{ marginTop: 10, color: '#FFF' }}>Verificando sesión...</ThemedText>
+      </View>
+    );
+  }
+
+  if (!user) {
+    return (
+      <ImageBackground
+        source={require('@/assets/images/cielon2.jpg')}
+        style={styles.background}
+      >
+        <View style={styles.overlay}>
+          <ThemedText type="title" style={styles.title}>Bienvenido a</ThemedText>
+          <ThemedText type="title" style={styles.titleHighlight}>Ciudad Activa</ThemedText>
+          <ThemedView style={styles.buttonContainer}>
+            <Button
+              title="Iniciar sesión con Google"
+              onPress={() => promptAsync()}
+              color="#FFA500"
+              disabled={!request}
+            />
+          </ThemedView>
+        </View>
+      </ImageBackground>
+    );
+  }
 
   return (
-    <ImageBackground
-      source={require('@/assets/images/cielon2.jpg')} // Asegúrate de tener una imagen en esta ruta
-      style={styles.background}
-    >
-      <View style={styles.overlay}>
-        <ThemedText type="title" style={styles.title}>
-          Bienvenido a
-        </ThemedText>
-        <ThemedText type="title" style={styles.titleHighlight}>
-          Ciudad Activa
-        </ThemedText>
-
-        {/* Campo de entrada */}
-        <ThemedView style={styles.inputContainer}>
-          <ThemedText type="subtitle" style={styles.subtitle}>
-            Ingresa un dato:
-          </ThemedText>
-          <TextInput
-            style={styles.input}
-            placeholder="Escribe algo..."
-            placeholderTextColor="#ccc"
-            value={inputValue}
-            onChangeText={setInputValue}
-          />
-          <Button title="Guardar en Firestore" onPress={addCustomData} color="#FFA500" />
-        </ThemedView>
-      </View>
-    </ImageBackground>
+    <View style={styles.centered}>
+      <ThemedText style={{ color: '#FFF', fontSize: 24 }}>Hola, {user.displayName || 'Usuario'}</ThemedText>
+      <ThemedText style={{ color: '#FFF', fontSize: 18 }}>Email: {user.email}</ThemedText>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  background: {
-    flex: 1,
-    resizeMode: 'cover',
-  },
+  background: { flex: 1, resizeMode: 'cover' },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)', // Oscurece el fondo para mejor legibilidad
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
   },
-  title: {
-    fontSize: 32,
-    color: '#FFFFFF',
-    fontFamily: 'sans-serif-light', // Puedes cambiar el tipo de letra
-  },
-  titleHighlight: {
-    fontSize: 40,
-    color: '#FFA500',
-    fontFamily: 'sans-serif-medium', // Puedes cambiar el tipo de letra
-    marginBottom: 40,
-  },
-  subtitle: {
-    fontSize: 18,
-    color: '#FFFFFF',
-    fontFamily: 'sans-serif',
-  },
-  inputContainer: {
-    width: '100%',
-    paddingHorizontal: 16,
-    paddingVertical: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 16,
-    marginTop: 20,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#FFA500',
-    padding: 12,
-    borderRadius: 8,
-    color: '#FFFFFF',
-    marginTop: 16,
-    marginBottom: 16,
+  title: { fontSize: 32, color: '#FFFFFF', fontFamily: 'sans-serif-light' },
+  titleHighlight: { fontSize: 40, color: '#FFA500', fontFamily: 'sans-serif-medium', marginBottom: 40 },
+  buttonContainer: { width: '80%', marginTop: 20 },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.8)',
   },
 });
