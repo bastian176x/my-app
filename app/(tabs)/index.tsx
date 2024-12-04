@@ -1,74 +1,110 @@
-import { Image, StyleSheet, Platform } from 'react-native';
-
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
+import React, { useState } from 'react';
+import { TextInput, Button, Alert, StyleSheet, View, ImageBackground } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 
+// Importa Firestore y funciones relacionadas
+import { db } from '../../FireConfig'; // Ajusta la ruta según la ubicación de tu archivo FireConfig.js
+import { collection, addDoc } from 'firebase/firestore';
+
 export default function HomeScreen() {
+  const [inputValue, setInputValue] = useState('');
+
+  const addCustomData = async () => {
+    if (!inputValue.trim()) {
+      Alert.alert('Error', 'Por favor ingresa un dato válido.');
+      return;
+    }
+
+    try {
+      // Referencia a la colección 'testCollection'
+      const docRef = await addDoc(collection(db, 'testCollection'), {
+        value: inputValue,
+        createdAt: new Date(),
+      });
+      Alert.alert('Éxito', `Dato añadido con ID: ${docRef.id}`);
+      setInputValue(''); // Limpiar el campo después de guardar
+    } catch (e) {
+      console.error('Error añadiendo el documento: ', e);
+      Alert.alert('Error', 'Hubo un problema al guardar el dato.');
+    }
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
+    <ImageBackground
+      source={require('@/assets/images/cielon2.jpg')} // Asegúrate de tener una imagen en esta ruta
+      style={styles.background}
+    >
+      <View style={styles.overlay}>
+        <ThemedText type="title" style={styles.title}>
+          Bienvenido a
         </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
+        <ThemedText type="title" style={styles.titleHighlight}>
+          Ciudad Activa
         </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+
+        {/* Campo de entrada */}
+        <ThemedView style={styles.inputContainer}>
+          <ThemedText type="subtitle" style={styles.subtitle}>
+            Ingresa un dato:
+          </ThemedText>
+          <TextInput
+            style={styles.input}
+            placeholder="Escribe algo..."
+            placeholderTextColor="#ccc"
+            value={inputValue}
+            onChangeText={setInputValue}
+          />
+          <Button title="Guardar en Firestore" onPress={addCustomData} color="#FFA500" />
+        </ThemedView>
+      </View>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  background: {
+    flex: 1,
+    resizeMode: 'cover',
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)', // Oscurece el fondo para mejor legibilidad
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    padding: 16,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  title: {
+    fontSize: 32,
+    color: '#FFFFFF',
+    fontFamily: 'sans-serif-light', // Puedes cambiar el tipo de letra
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  titleHighlight: {
+    fontSize: 40,
+    color: '#FFA500',
+    fontFamily: 'sans-serif-medium', // Puedes cambiar el tipo de letra
+    marginBottom: 40,
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#FFFFFF',
+    fontFamily: 'sans-serif',
+  },
+  inputContainer: {
+    width: '100%',
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 16,
+    marginTop: 20,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#FFA500',
+    padding: 12,
+    borderRadius: 8,
+    color: '#FFFFFF',
+    marginTop: 16,
+    marginBottom: 16,
   },
 });
